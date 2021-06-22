@@ -61,24 +61,37 @@ tforms2 = estimateGeometricTransform2D(matchedPoints2b, matchedPoints3,...
 
 %% Panoramic Construcction 
 
+% [xlim1, ylim1] = outputLimits(tforms1, [1 size(I1,2)], [1 size(I1,1)]);
+% [xlim2, ylim2] = outputLimits(tforms2, [1 size(I3,2)], [1 size(I3,1)]);
+% 
+%   
+% maxImageSize = max(imageSize);
+
+% % Find the minimum and maximum output limits. 
+% xMin = min([1; xlim(:)]);
+% xMax = max([maxImageSize(2); xlim(:)]);
+% 
+% yMin = min([1; ylim(:)]);
+% yMax = max([maxImageSize(1); ylim(:)]);
+% 
+% % Width and height of panorama.
+% width  = round(xMax - xMin);
+% height = round(yMax - yMin);
+% 
+% % Initialize the "empty" panorama.
 % panorama = zeros([height width 3], 'like', I);
-blender = vision.AlphaBlender('Operation', 'Binary mask', ...
-    'MaskSource', 'Input port');  
+
 % Initialize the "empty" panorama.
-panorama = zeros([3000 3000 3], 'like', I2);
-panoramaView = imref2d([1000 1000], [1 30000], [1 1000]);
+panorama = zeros([3000 3000 3], 'like', I);
+panoramaView = imref2d([3000 3000], [1 1000], []);
 
 % Transform I into the panorama.
-warpedImage1 = imwarp(I1, tforms1, 'OutputView', panoramaView);
-warpedImage3 = imwarp(I3, tforms2, 'OutputView', panoramaView);
+warpedImage = imwarp(I1, tforms1, 'OutputView', panoramaView);
 
 % Generate a binary mask.    
-mask1 = imwarp(true(size(I1,1),size(I1,2)), tforms1, 'OutputView', panoramaView);
-mask3 = imwarp(true(size(I3,1),size(I3,2)), tforms2, 'OutputView', panoramaView);
+mask = imwarp(true(size(I,1),size(I,2)), tforms1, 'OutputView', panoramaView);
 
 % Overlay the warpedImage onto the panorama.
-panorama = step(blender, panorama, warpedImage1, mask1);
-panorama = step(blender, panorama, warpedImage3, mask3);
-figure
-imshow(panorama)
+panorama = step(blender, panorama, warpedImage, mask);
+
 
