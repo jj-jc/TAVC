@@ -10,7 +10,7 @@
 %% LOOK AT ALL THE DIFFERENTE PARAMETERS YOU WANT TO CHOOSE
 clc, clear, close all;
 %Choose the algorithm for detection
-ALGORITHM = 2;
+ALGORITHM = 1;
     % SIFT = 1
     % SURF = 2
     % KAZE = 3
@@ -21,6 +21,12 @@ ALGORITHM = 2;
 HOMOGRAPHY = 2;
     % projective estimation of Matlab = 1
     % manually = 2
+FILTER = 1;
+    % No filters = 0
+    % Residual error = 1
+    % Geometric distance error = 2
+    % RANSAC = 3
+
 MOSAIC = 1;
     % Manually = 1
     % Matlab = 2
@@ -255,7 +261,7 @@ elseif HOMOGRAPHY == 2
 end
 
 %Calcula los nuevos puntos con la homografia (en la imagen)
-proyected_points=zeros(NUM_PUN1,3);
+proyected_points1=zeros(NUM_PUN1,3);
 if ALGORITHM == 1
     Points1_xyz = [matchedPoints1(:,:), ones(NUM_PUN1,1)];
     Points2a_xyz = [matchedPoints2a(:,:), ones(NUM_PUN1,1)];
@@ -268,24 +274,24 @@ for i=1:NUM_PUN1
     %Tercera componente a 1
     PuntoCalculado=PuntoCalculado/PuntoCalculado(3,1);
     %Almacena el puntos
-    proyected_points(i,:)= PuntoCalculado';
+    proyected_points1(i,:)= PuntoCalculado';
 end
 %Calcula el error para cada punto
-correct_points = [];
-errorTotal=0;
+errorTotal1=0;
 for i=1:NUM_PUN1
-    error=norm(proyected_points(i,:) - Points2a_xyz(i,:));
-    errorTotal=errorTotal+error;
+    error=norm(proyected_points1(i,:) - Points2a_xyz(i,:));
+    errorTotal1=errorTotal1+error;
     disp(['Punto ' num2str(i) '  Error pixeles ' num2str(error)]);
 %         if error < 0.5
 %             correct_points(i, :) =  Points2a_xyz(i,:);
 %         end
 end
-disp(['Media del Error ' num2str(errorTotal/NUM_PUN1)]);
+error_medio1 = errorTotal1/NUM_PUN1;
+disp(['Media del Error ' num2str(errorTotal1/NUM_PUN1)]);
 
 
 %Calcula los nuevos puntos con la homografia (en la imagen)
-proyected_points=zeros(NUM_PUN2,3);
+proyected_points2=zeros(NUM_PUN2,3);
 if ALGORITHM == 1
     Points2b_xyz = [matchedPoints2b(:,:), ones(NUM_PUN2,1)];
     Points3_xyz = [matchedPoints3(:,:), ones(NUM_PUN2,1)];
@@ -299,24 +305,166 @@ for i=1:NUM_PUN2
     %Tercera componente a 1
     PuntoCalculado=PuntoCalculado/PuntoCalculado(3,1);
     %Almacena el puntos
-    proyected_points(i,:)= PuntoCalculado';
+    proyected_points2(i,:)= PuntoCalculado';
 end
 
 %Calcula el error para cada punto
 correct_points = [];
 errorTotal=0;
 for i=1:NUM_PUN2
-    error=norm(proyected_points(i,:) - Points2b_xyz(i,:));
+    error=norm(proyected_points2(i,:) - Points2b_xyz(i,:));
     errorTotal=errorTotal+error;
     disp(['Punto ' num2str(i) '  Error pixeles ' num2str(error)]);
 %         if error < 0.5
 %             correct_points(i, :) =  Points2a_xyz(i,:);
 %         end
 end
+error_medio2 = errorTotal/NUM_PUN2;
 disp(['Media del Error ' num2str(errorTotal/NUM_PUN2)]);
 
 %% Filter of outliers
+counter = 1;
+if FILTER == 1 % Residual Error
+    for i=1:NUM_PUN1
+        error=norm(proyected_points1(i,:) - Points2a_xyz(i,:));
+        if error < error_medio1
+            acumulation_matchedPoints1(counter,:) = matchedPoints1(i,:);
+            acumulation_matchedPoints2a(counter,:) = matchedPoints2a(i,:);
+            counter = counter +1;
+        end
+    end
+    clearvars matchedPoints1 matchedPoints2a
+    matchedPoints1 = acumulation_matchedPoints1;
+    matchedPoints2a = acumulation_matchedPoints2a;
+    counter = 1; 
+    for i=1:NUM_PUN2
+        error=norm(proyected_points2(i,:) - Points2b_xyz(i,:));
+        if error < error_medio2
+            acumulation_matchedPoints2b(counter,:) = matchedPoints2b(i,:);
+            acumulation_matchedPoints3(counter,:) = matchedPoints3(i,:);
+            counter = counter +1;
+        end
+    end
+    clearvars matchedPoints2b matchedPoints3
+    matchedPoints2b = acumulation_matchedPoints2b;
+    matchedPoints3 = acumulation_matchedPoints3;
+elseif FILTER == 2
+elseif FILTER == 3
+end
 % [model,inlierIdx] = ransac(data,fitFcn,distFcn,sampleSize,maxDistance)
+%% Compute Homography
+NUM_PUN1 = size(matchedPoints1,1);
+NUM_PUN2 = size(matchedPoints3,1);
+if HOMOGRAPHY == 1
+    if ALGORITHM == 1
+        [tforms1, inlierIdx1] = estimateGeometricTransform2D(matchedPoints1, matchedPoints2a,...
+                'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                'MaxDistance', 1);
+        H12 = tforms1.T';
+        [tforms2, inlierIdx2] = estimateGeometricTransform2D(matchedPoints2a, matchedPoints2a,...
+                'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                'MaxDistance', 1);
+        H22 = tforms2.T';
+        [tforms3, inlierIdx3] = estimateGeometricTransform2D(matchedPoints3, matchedPoints2b, ...
+                'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                'MaxDistance', 1);   
+        H32 = tforms3.T';
+    elseif ALGORITHM == 2
+        [tforms1, inlierIdx1] = estimateGeometricTransform2D(matchedPoints1.Location, matchedPoints2a.Location,...
+                'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                'MaxDistance', 1);
+        H12 = tforms1.T';
+        [tforms2, inlierIdx2] = estimateGeometricTransform2D(matchedPoints2a.Location, matchedPoints2a.Location,...
+                'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                'MaxDistance', 1);
+        H22 = tforms2.T';
+        [tforms3, inlierIdx3] = estimateGeometricTransform2D(matchedPoints3.Location, matchedPoints2b.Location, ...
+                'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                'MaxDistance', 1);   
+        H32 = tforms3.T';
+        
+    end
+elseif HOMOGRAPHY == 2 
+    if ALGORITHM == 2
+        tform = projective2d; tforms1 = tform; tforms2 = tform; tforms3 = tform;
+        H12 = homography(NUM_PUN1, matchedPoints2a.Location, matchedPoints1.Location);
+        tforms1.T = H12';  
+        H22 = eye(3,3);
+        tforms2.T = H22'; 
+        H32 = homography(NUM_PUN2, matchedPoints2b.Location, matchedPoints3.Location);
+        tforms3.T = H32'; 
+    elseif ALGORITHM == 1
+        tform = projective2d; tforms1 = tform; tforms2 = tform; tforms3 = tform;
+        H12 = homography(NUM_PUN1, matchedPoints2a, matchedPoints1);
+        tforms1.T = H12';  
+        H22 = eye(3,3);
+        tforms2.T = H22'; 
+        H32 = homography(NUM_PUN2, matchedPoints2b, matchedPoints3);
+        tforms3.T = H32'; 
+    end
+end
+
+%Calcula los nuevos puntos con la homografia (en la imagen)
+proyected_points1=zeros(NUM_PUN1,3);
+if ALGORITHM == 1
+    Points1_xyz = [matchedPoints1(:,:), ones(NUM_PUN1,1)];
+    Points2a_xyz = [matchedPoints2a(:,:), ones(NUM_PUN1,1)];
+elseif ALGORITHM == 2
+    Points1_xyz = [matchedPoints1.Location(:,:), ones(NUM_PUN1,1)];
+    Points2a_xyz = [matchedPoints2a.Location(:,:), ones(NUM_PUN1,1)];
+end
+for i=1:NUM_PUN1
+    PuntoCalculado=H12*(Points1_xyz(i,:)');
+    %Tercera componente a 1
+    PuntoCalculado=PuntoCalculado/PuntoCalculado(3,1);
+    %Almacena el puntos
+    proyected_points1(i,:)= PuntoCalculado';
+end
+%Calcula el error para cada punto
+errorTotal1=0;
+for i=1:NUM_PUN1
+    error=norm(proyected_points1(i,:) - Points2a_xyz(i,:));
+    errorTotal1=errorTotal1+error;
+    disp(['Punto ' num2str(i) '  Error pixeles ' num2str(error)]);
+%         if error < 0.5
+%             correct_points(i, :) =  Points2a_xyz(i,:);
+%         end
+end
+error_medio1 = errorTotal1/NUM_PUN1;
+disp(['Media del Error ' num2str(errorTotal1/NUM_PUN1)]);
+
+
+%Calcula los nuevos puntos con la homografia (en la imagen)
+proyected_points2=zeros(NUM_PUN2,3);
+if ALGORITHM == 1
+    Points2b_xyz = [matchedPoints2b(:,:), ones(NUM_PUN2,1)];
+    Points3_xyz = [matchedPoints3(:,:), ones(NUM_PUN2,1)];
+elseif ALGORITHM == 2
+    Points2b_xyz = [matchedPoints2b.Location(:,:), ones(NUM_PUN2,1)];
+    Points3_xyz = [matchedPoints3.Location(:,:), ones(NUM_PUN2,1)];
+end
+
+for i=1:NUM_PUN2
+    PuntoCalculado=H32*(Points3_xyz(i,:)');
+    %Tercera componente a 1
+    PuntoCalculado=PuntoCalculado/PuntoCalculado(3,1);
+    %Almacena el puntos
+    proyected_points2(i,:)= PuntoCalculado';
+end
+
+%Calcula el error para cada punto
+correct_points = [];
+errorTotal=0;
+for i=1:NUM_PUN2
+    error=norm(proyected_points2(i,:) - Points2b_xyz(i,:));
+    errorTotal=errorTotal+error;
+    disp(['Punto ' num2str(i) '  Error pixeles ' num2str(error)]);
+%         if error < 0.5
+%             correct_points(i, :) =  Points2a_xyz(i,:);
+%         end
+end
+error_medio2 = errorTotal/NUM_PUN2;
+disp(['Media del Error ' num2str(errorTotal/NUM_PUN2)]);
 
 %% Panoramic Construcction 
 if MOSAIC == 2

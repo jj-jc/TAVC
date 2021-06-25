@@ -10,7 +10,7 @@
 %% LOOK AT ALL THE DIFFERENTE PARAMETERS YOU WANT TO CHOOSE
 clc, clear, close all;
 %Choose the algorithm for detection
-ALGORITHM = 2;
+ALGORITHM = 1;
     % SIFT = 1
     % SURF = 2
     % KAZE = 3
@@ -21,9 +21,15 @@ ALGORITHM = 2;
 HOMOGRAPHY = 2;
     % projective estimation of Matlab = 1
     % manually = 2
-MOSAIC = 2;
-    % MATLAB = 1
-    % Manually = 2
+FILTER = 1;
+    % No filters = 0
+    % Residual error = 1
+    % Geometric distance error = 2
+    % RANSAC = 3
+
+MOSAIC = 1;
+    % Manually = 1
+    % Matlab = 2
     
   
 format long
@@ -44,14 +50,6 @@ nombre_I3 = '..\Escena4\Escena4_imagen3.pgm';
 
 if ALGORITHM == 1
 %%  SIFT
-    %Parameters
-    MatchThresholdSIFT=0.4;
-    MatchThreshold=0.4;
-    MatchThresholdHamming=10.0;
-    MaxRatioSIFT=0.25;
-    MaxRatio=0.2;
-    MaxRatioHamming=0.4;
-
     [Im1, des1, loc1] = sift('..\Escena4\Escena4_imagen1.pgm');
     numSIFT_1=size(loc1,1);
 
@@ -60,6 +58,14 @@ if ALGORITHM == 1
 
     [Im3, des3, loc3] = sift('..\Escena4\Escena4_imagen3.pgm');
     numSIFT_3=size(loc3,1);
+%% 
+    %Parameters
+    MatchThresholdSIFT=0.2;
+    MaxRatioSIFT=0.15;
+%     MatchThreshold=0.4;
+%     MatchThresholdHamming=10.0;
+%     MaxRatio=0.2;
+%     MaxRatioHamming=0.4;
 
     %Correspondence 1 - 2
     [puntosMatchSIFT] = casarPuntosSIFT(MatchThresholdSIFT, ...
@@ -92,7 +98,7 @@ elseif ALGORITHM == 2
 %%  SURF
     %Image 1
     grayImage1 = im2gray(I1);
-    points1 = detectSURFFeatures(grayImage1, 'MetricThreshold', 1000, ...
+    points1 = detectSURFFeatures(grayImage1, 'MetricThreshold', 10, ...
         'NumOctaves', 3, ...
         'NumScaleLevels', 4, ...
         'ROI', [1 1 size(I1,2) size(I1,1)]);
@@ -103,7 +109,7 @@ elseif ALGORITHM == 2
 
     %Image 2
     grayImage2 = im2gray(I2);
-    points2 = detectSURFFeatures(grayImage2, 'MetricThreshold', 1000, ...
+    points2 = detectSURFFeatures(grayImage2, 'MetricThreshold', 10, ...
         'NumOctaves', 3, ...
         'NumScaleLevels', 4, ...
         'ROI', [1 1 size(I1,2) size(I1,1)]);
@@ -113,7 +119,10 @@ elseif ALGORITHM == 2
 
     %Image 3 
     grayImage3 = im2gray(I3);
-    points3 = detectSURFFeatures(grayImage3);
+    points3 = detectSURFFeatures(grayImage3, 'MetricThreshold', 10, ...
+        'NumOctaves', 3, ...
+        'NumScaleLevels', 4, ...
+        'ROI', [1 1 size(I1,2) size(I1,1)]);
     [features3, points3] = extractFeatures(grayImage3, points3);
     figure; imshow(I3); hold on
     plot(points3.selectStrongest(6000), 'showOrientation', false, 'showScale', false);
@@ -121,17 +130,22 @@ elseif ALGORITHM == 2
     %Correspondences 
     indexPairs21 = matchFeatures(features1, features2, 'Unique', true, ...
         'Method', 'Exhaustive', ...
-        'MatchThreshold', 10, ...
-        'MaxRatio', 0.6, ...
+        'MatchThreshold', 0.4, ...
+        'MaxRatio', 0.25, ...
         'Metric', 'SSD');
-    matchedPoints1 = points1(indexPairs21(1:20,1), :);
-    matchedPoints2a = points2(indexPairs21(1:20,2), :);  
+    matchedPoints1 = points1(indexPairs21(:,1), :);
+    matchedPoints2a = points2(indexPairs21(:,2), :);  
     % I2 = [I1, I2];
     figure; ax = axes;
     showMatchedFeatures(I1, I2, matchedPoints1, matchedPoints2a, 'montage', 'Parent', ax)
     legend(ax, 'Matched points Image 1', 'Matched points Image 2');
 
-    indexPairs23 = matchFeatures(features2, features3, 'Unique', true);
+    indexPairs23 = matchFeatures(features2, features3, 'Unique', true, ...
+    'Method', 'Exhaustive', ...
+    'MatchThreshold', 0.4, ...
+    'MaxRatio', 0.25, ...
+    'Metric', 'SSD');
+
     matchedPoints2b = points2(indexPairs23(1:20,1), :);
     matchedPoints3 = points3(indexPairs23(1:20,2), :);
     figure; ax = axes;
@@ -192,34 +206,62 @@ elseif ALGORITHM == 5
 elseif ALGORITHM == 5
 %% ORB = 6
 end
+
+
 %% Compute Homography
 NUM_PUN1 = size(matchedPoints1,1);
 NUM_PUN2 = size(matchedPoints3,1);
 if HOMOGRAPHY == 1
-    [tforms1, inlierIdx1] = estimateGeometricTransform2D(matchedPoints1, matchedPoints2a,...
-            'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
-            'MaxDistance', 1);
-    H12 = tforms1.T';
-    [tforms2, inlierIdx2] = estimateGeometricTransform2D(matchedPoints2a, matchedPoints2a,...
-            'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
-            'MaxDistance', 1);
-    H22 = tforms2.T';
-    [tforms3, inlierIdx3] = estimateGeometricTransform2D(matchedPoints3, matchedPoints2b, ...
-            'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
-            'MaxDistance', 1);   
-    H32 = tforms3.T';
-elseif HOMOGRAPHY == 2
-    tform = projective2d; tforms1 = tform; tforms2 = tform; tforms3 = tform;
-    H12 = homography(NUM_PUN1, matchedPoints2a.Location, matchedPoints1.Location);
-    tforms1.T = H12';  
-    H22 = eye(3,3);
-    tforms2.T = H22'; 
-    H32 = homography(NUM_PUN2, matchedPoints2b.Location, matchedPoints3.Location);
-    tforms3.T = H32'; 
+    if ALGORITHM == 1
+        [tforms1, inlierIdx1] = estimateGeometricTransform2D(matchedPoints1, matchedPoints2a,...
+                'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                'MaxDistance', 1);
+        H12 = tforms1.T';
+        [tforms2, inlierIdx2] = estimateGeometricTransform2D(matchedPoints2a, matchedPoints2a,...
+                'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                'MaxDistance', 1);
+        H22 = tforms2.T';
+        [tforms3, inlierIdx3] = estimateGeometricTransform2D(matchedPoints3, matchedPoints2b, ...
+                'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                'MaxDistance', 1);   
+        H32 = tforms3.T';
+    elseif ALGORITHM == 2
+        [tforms1, inlierIdx1] = estimateGeometricTransform2D(matchedPoints1.Location, matchedPoints2a.Location,...
+                'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                'MaxDistance', 1);
+        H12 = tforms1.T';
+        [tforms2, inlierIdx2] = estimateGeometricTransform2D(matchedPoints2a.Location, matchedPoints2a.Location,...
+                'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                'MaxDistance', 1);
+        H22 = tforms2.T';
+        [tforms3, inlierIdx3] = estimateGeometricTransform2D(matchedPoints3.Location, matchedPoints2b.Location, ...
+                'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                'MaxDistance', 1);   
+        H32 = tforms3.T';
+        
+    end
+elseif HOMOGRAPHY == 2 
+    if ALGORITHM == 2
+        tform = projective2d; tforms1 = tform; tforms2 = tform; tforms3 = tform;
+        H12 = homography(NUM_PUN1, matchedPoints2a.Location, matchedPoints1.Location);
+        tforms1.T = H12';  
+        H22 = eye(3,3);
+        tforms2.T = H22'; 
+        H32 = homography(NUM_PUN2, matchedPoints2b.Location, matchedPoints3.Location);
+        tforms3.T = H32'; 
+    elseif ALGORITHM == 1
+        tform = projective2d; tforms1 = tform; tforms2 = tform; tforms3 = tform;
+        H12 = homography(NUM_PUN1, matchedPoints2a, matchedPoints1);
+        tforms1.T = H12';  
+        H22 = eye(3,3);
+        tforms2.T = H22'; 
+        H32 = homography(NUM_PUN2, matchedPoints2b, matchedPoints3);
+        tforms3.T = H32'; 
+    end
 end
 
 %Calcula los nuevos puntos con la homografia (en la imagen)
-proyected_points=zeros(NUM_PUN1,3);
+proyected_points1=zeros(NUM_PUN1,3);
 if ALGORITHM == 1
     Points1_xyz = [matchedPoints1(:,:), ones(NUM_PUN1,1)];
     Points2a_xyz = [matchedPoints2a(:,:), ones(NUM_PUN1,1)];
@@ -232,24 +274,24 @@ for i=1:NUM_PUN1
     %Tercera componente a 1
     PuntoCalculado=PuntoCalculado/PuntoCalculado(3,1);
     %Almacena el puntos
-    proyected_points(i,:)= PuntoCalculado';
+    proyected_points1(i,:)= PuntoCalculado';
 end
 %Calcula el error para cada punto
-correct_points = [];
-errorTotal=0;
+errorTotal1=0;
 for i=1:NUM_PUN1
-    error=norm(proyected_points(i,:) - Points2a_xyz(i,:));
-    errorTotal=errorTotal+error;
+    error=norm(proyected_points1(i,:) - Points2a_xyz(i,:));
+    errorTotal1=errorTotal1+error;
     disp(['Punto ' num2str(i) '  Error pixeles ' num2str(error)]);
 %         if error < 0.5
 %             correct_points(i, :) =  Points2a_xyz(i,:);
 %         end
 end
-disp(['Media del Error ' num2str(errorTotal/NUM_PUN1)]);
+error_medio1 = errorTotal1/NUM_PUN1;
+disp(['Media del Error ' num2str(errorTotal1/NUM_PUN1)]);
 
 
 %Calcula los nuevos puntos con la homografia (en la imagen)
-proyected_points=zeros(NUM_PUN2,3);
+proyected_points2=zeros(NUM_PUN2,3);
 if ALGORITHM == 1
     Points2b_xyz = [matchedPoints2b(:,:), ones(NUM_PUN2,1)];
     Points3_xyz = [matchedPoints3(:,:), ones(NUM_PUN2,1)];
@@ -263,14 +305,14 @@ for i=1:NUM_PUN2
     %Tercera componente a 1
     PuntoCalculado=PuntoCalculado/PuntoCalculado(3,1);
     %Almacena el puntos
-    proyected_points(i,:)= PuntoCalculado';
+    proyected_points2(i,:)= PuntoCalculado';
 end
 
 %Calcula el error para cada punto
 correct_points = [];
 errorTotal=0;
 for i=1:NUM_PUN2
-    error=norm(proyected_points(i,:) - Points2b_xyz(i,:));
+    error=norm(proyected_points2(i,:) - Points2b_xyz(i,:));
     errorTotal=errorTotal+error;
     disp(['Punto ' num2str(i) '  Error pixeles ' num2str(error)]);
 %         if error < 0.5
@@ -280,7 +322,79 @@ end
 disp(['Media del Error ' num2str(errorTotal/NUM_PUN2)]);
 
 %% Filter of outliers
-
+counter = 1;
+if FILTER == 1 % Residual Error
+    for i=1:NUM_PUN1
+        error=norm(proyected_points1(i,:) - Points2a_xyz(i,:));
+        if error < error_medio1
+            acumulation_matchedPoints1(counter,:) = matchedPoints1(i,:);
+            acumulation_matchedPoints2a(counter,:) = matchedPoints2a(i,:);
+            counter = counter +1;
+        end
+    end
+counter = 1; 
+    for i=1:NUM_PUN2
+        error=norm(proyected_points2(i,:) - Points2b_xyz(i,:));
+        if error < error_medio2
+            acumulation_matchedPoints2b(counter,:) = matchedPoints2b(i,:);
+            acumulation_matchedPoints3(counter,:) = matchedPoints3(i,:);
+            counter = counter +1;
+        end
+    end
+    
+    if HOMOGRAPHY == 1
+        if ALGORITHM == 1
+            [tforms1, inlierIdx1] = estimateGeometricTransform2D(matchedPoints1, matchedPoints2a,...
+                    'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                    'MaxDistance', 1);
+            H12 = tforms1.T';
+            [tforms2, inlierIdx2] = estimateGeometricTransform2D(matchedPoints2a, matchedPoints2a,...
+                    'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                    'MaxDistance', 1);
+            H22 = tforms2.T';
+            [tforms3, inlierIdx3] = estimateGeometricTransform2D(matchedPoints3, matchedPoints2b, ...
+                    'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                    'MaxDistance', 1);   
+            H32 = tforms3.T';
+        elseif ALGORITHM == 2
+            [tforms1, inlierIdx1] = estimateGeometricTransform2D(matchedPoints1.Location, matchedPoints2a.Location,...
+                    'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                    'MaxDistance', 1);
+            H12 = tforms1.T';
+            [tforms2, inlierIdx2] = estimateGeometricTransform2D(matchedPoints2a.Location, matchedPoints2a.Location,...
+                    'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                    'MaxDistance', 1);
+            H22 = tforms2.T';
+            [tforms3, inlierIdx3] = estimateGeometricTransform2D(matchedPoints3.Location, matchedPoints2b.Location, ...
+                    'projective', 'Confidence', 99.9, 'MaxNumTrials', 2000, ...
+                    'MaxDistance', 1);   
+            H32 = tforms3.T';
+        
+        end
+    elseif HOMOGRAPHY == 2 
+        if ALGORITHM == 2
+            tform = projective2d; tforms1 = tform; tforms2 = tform; tforms3 = tform;
+            H12 = homography(NUM_PUN1, matchedPoints2a.Location, matchedPoints1.Location);
+            tforms1.T = H12';  
+            H22 = eye(3,3);
+            tforms2.T = H22'; 
+            H32 = homography(NUM_PUN2, matchedPoints2b.Location, matchedPoints3.Location);
+            tforms3.T = H32'; 
+        elseif ALGORITHM == 1
+            tform = projective2d; tforms1 = tform; tforms2 = tform; tforms3 = tform;
+            H12 = homography(NUM_PUN1, matchedPoints2a, matchedPoints1);
+            tforms1.T = H12';  
+            H22 = eye(3,3);
+            tforms2.T = H22'; 
+            H32 = homography(NUM_PUN2, matchedPoints2b, matchedPoints3);
+            tforms3.T = H32'; 
+        end
+    end
+    
+elseif FILTER == 2
+elseif FILTER == 3
+end
+% [model,inlierIdx] = ransac(data,fitFcn,distFcn,sampleSize,maxDistance)
 
 %% Panoramic Construcction 
 if MOSAIC == 2
@@ -340,10 +454,10 @@ if MOSAIC == 2
     % panorama = step(blender, panorama, warpedImage3, mask3);
     % figure
     % imshow(panorama)
-elseif MOSAIC == 1
-    
-    width 
-    panorama = zeros([2000 4000 3], 'like', I1);
+elseif MOSAIC == 1   
+    width = 4000;
+    hight = 2000;
+    panorama = zeros([hight width 3], 'like', I1);
 %     imshow(panorama)
     I2_projected = homographic_projection(tforms2.T',I2, panorama);
     I1_projected = homographic_projection(tforms1.T',I1, I2_projected);
@@ -354,18 +468,8 @@ elseif MOSAIC == 1
     figure
     imshow(I3_projected)
     
-    final_image = I3_projected;
-    top = 1;
-    rigth = 1;
-    left = 2000;
-    bot = 4000;
-    
-    for i=1:2000
-        for j=1:4000
-            if ~ isequal(I3_projected(i,j,:),[0,0,0])
-                
-                break
-               
+    final_image = I3_projected(750:2000, 200:3200,:);
+    imshow(final_image)
             
                 
     
