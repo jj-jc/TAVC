@@ -1,7 +1,8 @@
-function [H] = homography(num_pun, points1, points2)
+function [H] = homography(points1, points2)
 %Forma el sistema
 % H12
 format long
+num_pun = size(points1,1);
 matriz=zeros(num_pun*2,8);
 vector=zeros(num_pun*2,1);
 
